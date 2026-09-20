@@ -33,6 +33,31 @@ export interface Outlet {
   heightMm: number;
   kind: OutletKind;
   circuit?: string;
+  /** 预计功率 (W) */
+  powerW?: number;
+  /** 是否常用（长期/高频使用） */
+  frequent?: boolean;
+}
+
+/** 判超记录中保留的点位快照 */
+export interface CircuitCheckOutlet {
+  id: string;
+  kind: OutletKind;
+  wallKey: string;
+  xMm: number;
+  heightMm: number;
+  powerW: number;
+  frequent: boolean;
+}
+
+/** 一次回路超载判定的留存结论 */
+export interface CircuitCheck {
+  id: string;
+  at: number;
+  circuit: string;
+  totalW: number;
+  limitW: number;
+  outlets: CircuitCheckOutlet[];
 }
 
 export type Unit = 'm2' | 'm' | 'kg' | 'roll' | 'pcs';
@@ -54,6 +79,10 @@ export interface Plan {
   openings: Opening[];
   outlets: Outlet[];
   materials: MatSpec[];
+  /** 每回路安全上限 (W)，缺省用 DEFAULT_CIRCUIT_LIMIT_W */
+  circuitLimitW?: number;
+  /** 回路超载判定历史（新记录追加在末尾） */
+  circuitChecks?: CircuitCheck[];
 }
 
 export interface WallSegment {

@@ -3,6 +3,12 @@ import { useParams, Link } from 'react-router-dom';
 import { useStore } from '../store';
 import { polygonArea, getWallSegments, formatMm } from '../utils/geometry';
 import { calcMaterials } from '../utils/materialCalc';
+import {
+  DEFAULT_CIRCUIT_LIMIT_W,
+  MAINS_VOLTAGE,
+  groupOutletsByCircuit,
+  outletPower,
+} from '../utils/circuitCalc';
 
 export default function PrintView() {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +22,9 @@ export default function PrintView() {
 
   const results = calcMaterials(plan.rooms, plan.openings, plan.materials);
   const totalPrice = results.reduce((s, r) => s + r.totalPrice, 0);
+  const limitW = plan.circuitLimitW ?? DEFAULT_CIRCUIT_LIMIT_W;
+  const circuitGroups = groupOutletsByCircuit(plan.outlets, limitW);
+  const checkCount = plan.circuitChecks?.length ?? 0;
 
   const handlePrint = () => {
     window.print();
@@ -148,6 +157,8 @@ export default function PrintView() {
                             <text x={ox} y={oy - 10} fontSize="9" fill={color} textAnchor="middle">
                               {o.kind === 'socket' ? '插座' : o.kind === 'switch' ? '开关' : o.kind === 'net' ? '网口' : o.kind === 'light' ? '灯' : '水口'} {formatMm(o.heightMm)}
                               {o.circuit ? ` ${o.circuit}` : ''}
+                              {outletPower(o) > 0 ? ` ${outletPower(o)}W` : ''}
+                              {o.frequent ? ' 常用' : ''}
                             </text>
                           </g>
                         );
@@ -159,6 +170,53 @@ export default function PrintView() {
             </div>
           );
         })}
+
+        {/* Circuit Load */}
+        <div className="card print-page">
+          <h2 style={{ marginBottom: 16, borderBottom: '2px solid #3498db', paddingBottom: 8 }}>
+            回路负载核算
+          </h2>
+          {circuitGroups.length === 0 ? (
+            <p style={{ color: '#999' }}>所有点位均未填写回路，未进行负载核算。</p>
+          ) : (
+            <>
+              <table>
+                <thead>
+                  <tr>
+                    <th>回路</th>
+                    <th>点位数</th>
+                    <th>合计功率</th>
+                    <th>其中常用</th>
+                    <th>估算电流</th>
+                    <th>安全上限</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {circuitGroups.map((g) => (
+                    <tr
+                      key={g.name}
+                      style={g.overLimit ? { background: '#fdedec', color: '#c0392b', fontWeight: 500 } : undefined}
+                    >
+                      <td>{g.name}</td>
+                      <td>{g.outlets.length}</td>
+                      <td>{g.totalW}W</td>
+                      <td>{g.frequentW}W</td>
+                      <td>{(g.totalW / MAINS_VOLTAGE).toFixed(1)}A</td>
+                      <td>{g.limitW}W</td>
+                      <td>{g.overLimit ? '⚠ 超载' : '正常'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ marginTop: 12, fontSize: 12, color: '#666' }}>
+                安全上限 {limitW}W/回路（约 {(limitW / MAINS_VOLTAGE).toFixed(1)}A @ {MAINS_VOLTAGE}V）。
+                超载回路请拆分为两路或换用低功率设备。
+                {checkCount > 0 && ` 历史上共记录 ${checkCount} 次超载判定，明细见「墙面点位」页的判定记录。`}
+              </div>
+            </>
+          )}
+        </div>
 
         {/* BOM */}
         <div className="card print-page">

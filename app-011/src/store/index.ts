@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import type { Plan, Room, Opening, Outlet, MatSpec } from '../types';
 import { DEFAULT_MATS } from '../utils/materialCalc';
+import {
+  DEFAULT_CIRCUIT_LIMIT_W,
+  buildOverloadChecks,
+  isSameCheck,
+} from '../utils/circuitCalc';
 
 interface AppState {
   plans: Plan[];
@@ -17,12 +22,32 @@ interface AppState {
   addOpening: (planId: string, opening: Opening) => void;
   deleteOpening: (planId: string, openingId: string) => void;
   addOutlet: (planId: string, outlet: Outlet) => void;
+  updateOutlet: (planId: string, outletId: string, updater: (o: Outlet) => Outlet) => void;
   deleteOutlet: (planId: string, outletId: string) => void;
+  setCircuitLimitW: (planId: string, limitW: number) => void;
+  clearCircuitChecks: (planId: string) => void;
   updateMaterials: (planId: string, mats: MatSpec[]) => void;
 }
 
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+/**
+ * 点位或上限变动后重算各回路负载；
+ * 对超载回路追加一条判定记录（与上次结论相同则跳过），历史可回翻。
+ */
+function withCircuitCheck(plan: Plan): Plan {
+  const limitW = plan.circuitLimitW ?? DEFAULT_CIRCUIT_LIMIT_W;
+  const incoming = buildOverloadChecks(plan.outlets, limitW, genId);
+  if (incoming.length === 0) return plan;
+  const history = plan.circuitChecks ?? [];
+  const fresh = incoming.filter((rec) => {
+    const last = [...history].reverse().find((c) => c.circuit === rec.circuit);
+    return !last || !isSameCheck(last, rec);
+  });
+  if (fresh.length === 0) return plan;
+  return { ...plan, circuitChecks: [...history, ...fresh] };
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -42,6 +67,8 @@ export const useStore = create<AppState>((set, get) => ({
       openings: [],
       outlets: [],
       materials: [...DEFAULT_MATS],
+      circuitLimitW: DEFAULT_CIRCUIT_LIMIT_W,
+      circuitChecks: [],
     };
     set((state) => ({ plans: [...state.plans, plan], currentPlanId: id }));
     return id;
@@ -108,7 +135,19 @@ export const useStore = create<AppState>((set, get) => ({
   addOutlet: (planId, outlet) =>
     set((state) => ({
       plans: state.plans.map((p) =>
-        p.id === planId ? { ...p, outlets: [...p.outlets, outlet] } : p
+        p.id === planId ? withCircuitCheck({ ...p, outlets: [...p.outlets, outlet] }) : p
+      ),
+    })),
+
+  updateOutlet: (planId, outletId, updater) =>
+    set((state) => ({
+      plans: state.plans.map((p) =>
+        p.id === planId
+          ? withCircuitCheck({
+              ...p,
+              outlets: p.outlets.map((o) => (o.id === outletId ? updater(o) : o)),
+            })
+          : p
       ),
     })),
 
@@ -116,9 +155,21 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => ({
       plans: state.plans.map((p) =>
         p.id === planId
-          ? { ...p, outlets: p.outlets.filter((o) => o.id !== outletId) }
+          ? withCircuitCheck({ ...p, outlets: p.outlets.filter((o) => o.id !== outletId) })
           : p
       ),
+    })),
+
+  setCircuitLimitW: (planId, limitW) =>
+    set((state) => ({
+      plans: state.plans.map((p) =>
+        p.id === planId ? withCircuitCheck({ ...p, circuitLimitW: limitW }) : p
+      ),
+    })),
+
+  clearCircuitChecks: (planId) =>
+    set((state) => ({
+      plans: state.plans.map((p) => (p.id === planId ? { ...p, circuitChecks: [] } : p)),
     })),
 
   updateMaterials: (planId, mats) =>
