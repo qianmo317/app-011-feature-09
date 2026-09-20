@@ -148,6 +148,8 @@ export default function PrintView() {
                             <text x={ox} y={oy - 10} fontSize="9" fill={color} textAnchor="middle">
                               {o.kind === 'socket' ? '插座' : o.kind === 'switch' ? '开关' : o.kind === 'net' ? '网口' : o.kind === 'light' ? '灯' : '水口'} {formatMm(o.heightMm)}
                               {o.circuit ? ` ${o.circuit}` : ''}
+                              {o.powerW ? ` ${o.powerW}W` : ''}
+                              {o.frequent ? ' 常用' : ''}
                             </text>
                           </g>
                         );

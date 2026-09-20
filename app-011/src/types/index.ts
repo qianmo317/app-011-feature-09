@@ -33,6 +33,28 @@ export interface Outlet {
   heightMm: number;
   kind: OutletKind;
   circuit?: string;
+  /** 设备功率（瓦），未填按 0 计 */
+  powerW?: number;
+  /** 是否常用（日常同时使用的设备） */
+  frequent?: boolean;
+}
+
+/** 一次回路判超的留档：结论 + 当时的点位快照 */
+export interface CircuitOverloadRecord {
+  id: string;
+  at: number;
+  circuit: string;
+  totalW: number;
+  limitW: number;
+  outlets: CircuitOutletSnapshot[];
+}
+
+export interface CircuitOutletSnapshot {
+  id: string;
+  kind: OutletKind;
+  label: string;
+  powerW: number;
+  frequent: boolean;
 }
 
 export type Unit = 'm2' | 'm' | 'kg' | 'roll' | 'pcs';
@@ -54,6 +76,12 @@ export interface Plan {
   openings: Opening[];
   outlets: Outlet[];
   materials: MatSpec[];
+  /** 回路安全上限（瓦），缺省用 DEFAULT_CIRCUIT_LIMIT_W */
+  circuitLimitW?: number;
+  /** 判超历史，每次判超结论变化时追加 */
+  circuitLog?: CircuitOverloadRecord[];
+  /** 各回路当前在超状态签名（circuit -> signature），用于判超去重，恢复正常后清除 */
+  circuitOverState?: Record<string, string>;
 }
 
 export interface WallSegment {
